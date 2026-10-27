@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-27T22:58:00Z",
+  "plans": [
+    {
+      "id": 1,
+      "date": "2026-10-27",
+      "mealType": "dinner",
+      "title": "Pan fry pork and brokoli",
+      "description": "",
+      "prepMinutes": null,
+      "cookMinutes": null,
+      "servings": null,
+      "ingredients": [
+        "Brokolli"
+      ],
+      "instructions": [
+        "Take out from fridge",
+        "Pan fry"
+      ],
+      "notes": ""
+    }
+  ]
+}
