@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly Meal Planner</title>
+<style>
+  :root{--bg:#faf6f1;--card:#fff;--ink:#2b2320;--muted:#7a6a63;--line:#e8ddd5;--accent:#c05621;--accent2:#dd7a3e;--soft:#f7ebe3;--err:#b42318;--ok:#027a48}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);padding:14px 16px;z-index:5}
+  h1{font-family:Georgia,'Times New Roman',serif;font-size:26px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+  button{cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:8px 14px;font-size:14px}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:disabled{opacity:.5;cursor:not-allowed}
+  button.danger{color:var(--err);border-color:#f1c6c1}
+  main{max-width:1100px;margin:0 auto;padding:16px}
+  .weeknav{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .weeklabel{font-family:Georgia,serif;font-size:18px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+  .day{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;min-height:120px}
+  .day.today{border-color:var(--accent2);box-shadow:0 0 0 2px var(--soft)}
+  .day h3{margin:0 0 2px;font-size:15px}.day .date{color:var(--muted);font-size:12px;margin-bottom:8px}
+  .cat{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:10px 0 4px}
+  .meal{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--soft);border-radius:10px;padding:9px 10px;margin:4px 0;font-size:14px}
+  .meal small{display:block;color:var(--muted);margin-top:2px}
+  .placeholder{color:var(--muted);text-align:center;padding:22px 6px;font-size:14px;border:1px dashed var(--line);border-radius:10px;margin-top:8px}
+  .add{font-size:13px;padding:5px 10px;margin:4px 0}
+  .msg{margin:10px 0;padding:10px 12px;border-radius:10px;font-size:14px;display:none}
+  .msg.err{display:block;background:#fef3f2;color:var(--err);border:1px solid #fecdca}
+  .msg.ok{display:block;background:#ecfdf3;color:var(--ok);border:1px solid #a6f4c5}
+  dialog{border:1px solid var(--line);border-radius:14px;max-width:560px;width:calc(100% - 28px);padding:18px}
+  dialog::backdrop{background:rgba(0,0,0,.35)}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,select,textarea{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit}
+  textarea{min-height:70px}
+  .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .note{font-size:12px;color:var(--muted);line-height:1.5}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Weekly Meal Planner</h1>
+  <div class="sub">View-only — tap a meal for the full recipe. <span id="updated">Last updated —</span></div>
+  <div class="row">
+    <button id="refreshBtn">↻ Refresh</button>
+    <button id="editBtn">Enable editing</button>
+    <button id="saveBtn" class="primary" style="display:none">Save to GitHub</button>
+    <button id="forgetBtn" style="display:none">Forget token</button>
+    <span id="dirty" class="sub"></span>
+  </div>
+  <div id="msg" class="msg"></div>
+</header>
+<main>
+  <div class="weeknav">
+    <button id="prevBtn">← Prev week</button>
+    <button id="todayBtn">This week</button>
+    <button id="nextBtn">Next week →</button>
+    <span class="weeklabel" id="weekLabel"></span>
+  </div>
+  <div id="board" class="grid"></div>
+  <p class="note" style="margin-top:16px">Data: <a href="https://github.com/steven-steven/meal-planner-data/blob/main/plans.json" target="_blank" rel="noopener">plans.json in meal-planner-data</a>. Editors need a GitHub account, collaborator write access on that repo, and their own token (below).</p>
+</main>
+
+<dialog id="tokenDlg">
+  <h3 style="margin-top:0">Enable editing</h3>
+  <p class="note">Paste your <b>own</b> GitHub token. It is stored only in this browser tab's session storage, is never built into this page, and is sent only to api.github.com to verify, check for conflicts, and commit on Save.</p>
+  <p class="note"><b>How to get a token:</b> GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token. Resource owner: you. Repository access: only <b>meal-planner-data</b>. Permissions: <b>Contents — Read and write</b>. You also need collaborator write access on steven-steven/meal-planner-data (the owner invites you under repo Settings → Collaborators).</p>
+  <label>GitHub token</label>
+  <input type="password" id="tokenInput" autocomplete="off" placeholder="github_pat_…">
+  <div class="row"><button id="tokenOk" class="primary">Enable editing</button><button id="tokenCancel">Cancel</button></div>
+</dialog>
+
+<dialog id="detailDlg"><div id="detailBody"></div><div class="row"><button id="detailEdit" class="primary" style="display:none">Edit</button><button id="detailClose">Close</button></div></dialog>
+
+<dialog id="formDlg">
+  <h3 style="margin-top:0" id="formTitle">Meal plan</h3>
+  <label>Date</label><input type="date" id="f_date">
+  <label>Meal</label><select id="f_meal"><option value="breakfast">Breakfast</option><option value="lunch">Lunch</option><option value="dinner">Dinner</option></select>
+  <label>Title</label><input id="f_title" placeholder="e.g. Pan fry pork and broccoli">
+  <label>Description</label><input id="f_desc">
+  <div class="cols">
+    <div><label>Prep (min)</label><input type="number" id="f_prep" min="0"></div>
+    <div><label>Cook (min)</label><input type="number" id="f_cook" min="0"></div>
+    <div><label>Servings</label><input type="number" id="f_serv" min="0"></div>
+  </div>
+  <label>Ingredients (one per line)</label><textarea id="f_ing"></textarea>
+  <label>Instructions (one step per line)</label><textarea id="f_ins"></textarea>
+  <label>Notes</label><textarea id="f_notes" style="min-height:44px"></textarea>
+  <div class="row">
+    <button id="formOk" class="primary">Done</button>
+    <button id="formMove" title="Change the Date or Meal above, then tap Done">Move = change Date/Meal, then Done</button>
+    <button id="formDelete" class="danger">Cancel / delete plan</button>
+    <button id="formCancel">Back</button>
+  </div>
+</dialog>
+
+<script>
+const OWNER='steven-steven', REPO='meal-planner-data', PATH='plans.json';
+const RAW='https://raw.githubusercontent.com/'+OWNER+'/'+REPO+'/main/'+PATH;
+const API='https://api.github.com/repos/'+OWNER+'/'+REPO+'/contents/'+PATH;
+let data={version:1,updatedAt:null,plans:[]}, draft=null, baselineSha=null, baselineJson=null;
+let editing=false, dirty=false, weekStart=monday(new Date()), currentId=null;
+const $=id=>document.getElementById(id);
+function monday(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());const day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);return x;}
+function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function fmtDate(s){const d=new Date(s+'T12:00:00');return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function showMsg(txt,ok){const m=$('msg');m.textContent=txt;m.className='msg '+(ok?'ok':'err');}
+function clearMsg(){$('msg').className='msg';$('msg').textContent='';}
+function plans(){return editing&&draft?draft:data.plans;}
+function setDirty(v){dirty=v;$('dirty').textContent=v?'Unsaved changes — tap Save to GitHub':'';
+  $('saveBtn').disabled=!v;}
+async function load(){
+  clearMsg();
+  try{
+    let r;
+    try{ r=await fetch('plans.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok) throw 0; }
+    catch(e){ r=await fetch(RAW+'?t='+Date.now(),{cache:'no-store'}); }
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    data=await r.json(); if(!Array.isArray(data.plans)) data.plans=[];
+    draft=JSON.parse(JSON.stringify(data.plans)); setDirty(false);
+    $('updated').textContent='Last updated '+(data.updatedAt?new Date(data.updatedAt).toLocaleString():'—');
+    render();
+  }catch(e){ showMsg('Couldn\u2019t load meals right now. Tap Refresh to try again.'); $('board').innerHTML=''; }
+}
+function render(){
+  const days=[...Array(7)].map((_,i)=>{const d=new Date(weekStart);d.setDate(d.getDate()+i);return d;});
+  $('weekLabel').textContent=days[0].toLocaleDateString(undefined,{month:'short',day:'numeric'})+' – '+days[6].toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+  const byDate={}; plans().forEach(p=>{(byDate[p.date]=byDate[p.date]||[]).push(p);});
+  $('board').innerHTML=days.map(d=>{
+    const ds=iso(d), list=byDate[ds]||[], today=ds===iso(new Date());
+    let h='<div class="day'+(today?' today':'')+'"><h3>'+d.toLocaleDateString(undefined,{weekday:'long'})+'</h3><div class="date">'+fmtDate(ds)+'</div>';
+    if(editing){
+      for(const mt of ['breakfast','lunch','dinner']){
+        h+='<div class="cat">'+mt+'</div>';
+        list.filter(p=>p.mealType===mt).forEach(p=>{h+=mealBtn(p);});
+        h+='<button class="add" data-add="'+ds+'|'+mt+'">+ Add</button>';
+      }
+    }else{
+      if(!list.length) h+='<div class="placeholder">No meals planned</div>';
+      for(const mt of ['breakfast','lunch','dinner']){
+        const sub=list.filter(p=>p.mealType===mt); if(!sub.length) continue;
+        h+='<div class="cat">'+mt+'</div>'; sub.forEach(p=>{h+=mealBtn(p);});
+      }
+    }
+    return h+'</div>';
+  }).join('');
+  document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDetail(+b.dataset.open));
+  document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const [dt,mt]=b.dataset.add.split('|');openForm(null,dt,mt);});
+}
+function mealBtn(p){const meta=[p.prepMinutes?('Prep '+p.prepMinutes+'m'):null,p.cookMinutes?('Cook '+p.cookMinutes+'m'):null,p.servings?(p.servings+' servings'):null].filter(Boolean).join(' · ');
+  return '<button class="meal" data-open="'+p.id+'">'+esc(p.title)+(meta?'<small>'+esc(meta)+'</small>':'')+'</button>';}
+function openDetail(id){ currentId=id; const p=plans().find(x=>x.id===id); if(!p) return;
+  $('detailBody').innerHTML='<div class="cat">'+esc(p.mealType)+' · '+esc(fmtDate(p.date))+'</div><h3 style="margin:4px 0">'+esc(p.title)+'</h3>'
+    +(p.description?'<p>'+esc(p.description)+'</p>':'')
+    +'<p class="note">'+[p.prepMinutes?('Prep '+p.prepMinutes+' min'):null,p.cookMinutes?('Cook '+p.cookMinutes+' min'):null,p.servings?('Servings '+p.servings):null].filter(Boolean).join(' · ')+'</p>'
+    +((p.ingredients||[]).length?'<h4>Ingredients</h4><ul>'+p.ingredients.map(i=>'<li>'+esc(i)+'</li>').join('')+'</ul>':'')
+    +((p.instructions||[]).length?'<h4>Method</h4><ol>'+p.instructions.map(i=>'<li>'+esc(i)+'</li>').join('')+'</ol>':'')
+    +(p.notes?'<h4>Notes</h4><p>'+esc(p.notes)+'</p>':'');
+  $('detailEdit').style.display=editing?'':'none'; $('detailDlg').showModal(); }
+function lines(v){return v.split('\n').map(s=>s.trim()).filter(Boolean);}
+function num(v){return v===''?null:+v;}
+function openForm(id,dt,mt){ currentId=id;
+  const p=id?draft.find(x=>x.id===id):{date:dt,mealType:mt,title:'',description:'',prepMinutes:null,cookMinutes:null,servings:null,ingredients:[],instructions:[],notes:''};
+  if(!p) return; $('formTitle').textContent=id?'Edit meal plan':'New meal plan';
+  $('f_date').value=p.date; $('f_meal').value=p.mealType; $('f_title').value=p.title||''; $('f_desc').value=p.description||'';
+  $('f_prep').value=p.prepMinutes??''; $('f_cook').value=p.cookMinutes??''; $('f_serv').value=p.servings??'';
+  $('f_ing').value=(p.ingredients||[]).join('\n'); $('f_ins').value=(p.instructions||[]).join('\n'); $('f_notes').value=p.notes||'';
+  $('formDelete').style.display=id?'':'none'; $('formDlg').showModal(); }
+async function fetchSha(token){ const r=await fetch(API,{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'},cache:'no-store'});
+  if(r.status===401||r.status===403) throw new Error('TOKEN'); if(!r.ok) throw new Error('HTTP '+r.status);
+  const j=await r.json(); baselineSha=j.sha;
+  try{ baselineJson=decodeURIComponent(escape(atob((j.content||'').replace(/\n/g,'')))); }catch(e){ baselineJson=null; } }
+function b64(str){ const bytes=new TextEncoder().encode(str); let bin=''; bytes.forEach(b=>bin+=String.fromCharCode(b)); return btoa(bin); }
+async function save(){
+  const token=sessionStorage.getItem('gh_token'); if(!token) return;
+  clearMsg(); $('saveBtn').disabled=true;
+  try{
+    const before=baselineSha;
+    await fetchSha(token);
+    if(before && baselineSha!==before) throw new Error('CONFLICT');
+    if(baselineJson){ try{ const cur=JSON.parse(baselineJson); if(JSON.stringify(cur.plans)!==JSON.stringify(data.plans) && !before) throw new Error('CONFLICT'); }catch(e){ if(e.message==='CONFLICT') throw e; } }
+    const out={version:1,updatedAt:new Date().toISOString(),plans:draft};
+    const r=await fetch(API,{method:'PUT',headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','Content-Type':'application/json'},
+      body:JSON.stringify({message:'Update meal plans',content:b64(JSON.stringify(out,null,2)+'\n'),sha:baselineSha})});
+    if(r.status===401||r.status===403) throw new Error('TOKEN');
+    if(r.status===409||r.status===422) throw new Error('CONFLICT');
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json(); data=out; baselineSha=j.content&&j.content.sha; setDirty(false);
+    $('updated').textContent='Last updated '+new Date(out.updatedAt).toLocaleString();
+    showMsg('Saved to GitHub. '+(j.commit?('Commit: '+j.commit.html_url):''),true); render();
+  }catch(e){
+    if(e.message==='TOKEN') showMsg('Save failed: bad token or no write access to meal-planner-data (401/403). Your draft is still here.');
+    else if(e.message==='CONFLICT') showMsg('Save stopped: plans.json changed since you loaded it. Refresh and re-apply your changes — nothing was overwritten.');
+    else showMsg('Save failed: network or GitHub error ('+e.message+'). Your draft is still here.');
+  }finally{ $('saveBtn').disabled=!dirty; }
+}
+$('refreshBtn').onclick=()=>{ if(dirty && !confirm('You have unsaved changes. Refresh and discard them?')) return; load(); };
+$('prevBtn').onclick=()=>{weekStart.setDate(weekStart.getDate()-7);render();};
+$('nextBtn').onclick=()=>{weekStart.setDate(weekStart.getDate()+7);render();};
+$('todayBtn').onclick=()=>{weekStart=monday(new Date());render();};
+$('editBtn').onclick=()=>{ if(sessionStorage.getItem('gh_token')){ enableEdit(); } else $('tokenDlg').showModal(); };
+$('tokenCancel').onclick=()=>$('tokenDlg').close();
+$('tokenOk').onclick=async()=>{ const t=$('tokenInput').value.trim(); if(!t) return;
+  sessionStorage.setItem('gh_token',t); try{ await fetchSha(t); $('tokenDlg').close(); enableEdit(); showMsg('Editing enabled. Add/edit, then Save to GitHub.',true); }
+  catch(e){ sessionStorage.removeItem('gh_token'); showMsg('That token could not read meal-planner-data on GitHub. Check the token and your collaborator access.'); } };
+function enableEdit(){ editing=true; draft=JSON.parse(JSON.stringify(data.plans));
+  $('editBtn').style.display='none'; $('saveBtn').style.display=''; $('forgetBtn').style.display=''; render(); }
+$('forgetBtn').onclick=()=>{ sessionStorage.removeItem('gh_token'); editing=false; setDirty(false);
+  $('editBtn').style.display=''; $('saveBtn').style.display='none'; $('forgetBtn').style.display='none'; render(); };
+$('saveBtn').onclick=save;
+$('detailClose').onclick=()=>$('detailDlg').close();
+$('detailEdit').onclick=()=>{ $('detailDlg').close(); openForm(currentId); };
+$('formCancel').onclick=()=>$('formDlg').close();
+$('formDelete').onclick=()=>{ if(currentId==null) return; draft=draft.filter(x=>x.id!==currentId); setDirty(true); $('formDlg').close(); render(); };
+$('formOk').onclick=()=>{ const title=$('f_title').value.trim(); if(!title){alert('Give the plan a title');return;}
+  const obj={id:currentId??(Math.max(0,...draft.map(x=>x.id||0))+1),date:$('f_date').value,mealType:$('f_meal').value,title,
+    description:$('f_desc').value.trim(),prepMinutes:num($('f_prep').value),cookMinutes:num($('f_cook').value),servings:num($('f_serv').value),
+    ingredients:lines($('f_ing').value),instructions:lines($('f_ins').value),notes:$('f_notes').value.trim()};
+  if(currentId==null) draft.push(obj); else draft=draft.map(x=>x.id===currentId?obj:x);
+  draft.sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id); setDirty(true); $('formDlg').close(); render(); };
+if(sessionStorage.getItem('gh_token')){ /* token present, user can tap Enable editing to resume */ }
+load();
+</script>
+</body>
+</html>
